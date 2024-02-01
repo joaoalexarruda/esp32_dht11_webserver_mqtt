@@ -4,10 +4,10 @@
  * Date: 2024-Jan
  * Description: This file contains the code for the ESP32 microcontroller
  *              that reads the temperature and humidity from the DHT11 sensor
- *              then calculates the moving average of the last 5 readings
- *              and publishes the values to a MQTT broker. The code also displays
- *              the values on a local web server using the ESPAsyncWebServer library.
- * 
+ *              then calculates the moving average of the last readings
+ *              and publishes the values to a MQTT broker. The code also
+ *              displays the values on a local web server using the
+ *              ESPAsyncWebServer library.
  */
 
 // Include the necessary headers/libraries
@@ -15,41 +15,41 @@
 #include <Arduino.h>
 #include <DHT.h>
 #include <PubSubClient.h>
-#include "ESPAsyncWebServer.h"
 #include <WiFi.h>
+#include <deque> // To be able to add and remove elements from both ends
+#include <numeric> 
+#include "ESPAsyncWebServer.h"
 
-// SSID and password for the Wi-Fi network
+// Wifi details: SSID and password
 const char *ssid = "joaoalex1";
 const char *password = "joao1579";
 
-// MQTT broker address and port
+// MQTT broker details: IP address and port
 const char *mqttServer = "192.168.29.165";
 const int mqttPort = 1883;
 
-// Number of readings to calculate the moving average
-const int numReadings = 5;
-int readingsIndex = 0;
-
-/*
- * These two lines of code are declaring and initializing arrays of floats
- * with all elements set to -1.0. It is a placeholder value to indicate that
- * the array element has not been set yet. Later, when we read the temperature
- * and humidity from the DHT11 sensor, we will update the array with the new
- * values.
- */
-float temperatureReadings[numReadings] = {-1.0};
-float humidityReadings[numReadings] = {-1.0};
-
-// Defines the DHT pin and type
-#define DHTPIN 4
-#define DHTTYPE DHT11
+// DHT11 sensor details: pin and type
+const int DHTPIN = 4;
+const int DHTTYPE = DHT11;
 DHT dht(DHTPIN, DHTTYPE);
 
-// Create AsyncWebServer object on port 80
+// Deque to store the last temperature and humidity readings
+// and calculate the moving average
+std::deque<float> temperatureReadings;
+std::deque<float> humidityReadings;
+
+// Size of the moving average, i.e., how many readings to consider
+const int MOVING_AVERAGE_SIZE = 10;
+
+// Time to keep track of the last reading
+unsigned long lastReadingTime = 0;
+
+// Create an instance of the AsyncWebServer class
+// to serve the web page
 AsyncWebServer server(80);
 
-/* This line creates an instance of the WiFiClient class which represents a TCP
-   client that can connect to a specified internet IP address and port. */
+// WifiClient and PubSubClient instances, 
+// to connect to the MQTT broker
 WiFiClient espClient;
 PubSubClient client(espClient);
 
@@ -80,50 +80,61 @@ void reconnect() {
     }
 }
 
-// Function to read the temperature from the DHT11 sensor
-float readTemperature() {
-    float temperature = dht.readTemperature();
-    return temperature;
-}
-
-// Function to read the humidity from the DHT11 sensor
-float readHumidity() {
-    float humidity = dht.readHumidity();
-    return humidity;
-}
-
-// Function to update the readings array
-void updateReadings(float *readings, float newValue) {
-    readings[readingsIndex] = newValue;
-    readingsIndex = (readingsIndex + 1) % numReadings;
-}
-
-/*
- * Function to calculate the moving average of the last 5 readings.
- * It takes an array of floats as an argument and returns a float.
- * The function iterates over the array and calculates the sum of all
- * the values that are not equal to -1.0. Then it divides the sum by
- * the number of values that are not equal to -1.0 and returns the result.
- */
-float calculateMovingAverage(float *readings) {
-    float sum = 0;
-    int count = 0;
-
-    for (int i = 0; i < numReadings; i++) {
-        if (readings[i] != -1.0) {
-            sum += readings[i];
-            count++;
-        }
+// Read the temperature from the DHT11 sensor and
+// calculate the moving average of the last readings
+float readTemperatureAndCalculateMovingAverage() {
+    float currentTemperature = dht.readTemperature();
+    // If the reading is NaN, return the last valid reading
+    if (isnan(currentTemperature)) {
+        return temperatureReadings.back();
     }
 
-    if (count > 0) {
-        return sum / count;
-    } else {
-        return -1.0;
+    // Add the current reading to the readings deque
+    temperatureReadings.push_back(currentTemperature);
+
+    // If we have more readings than we want to consider for the moving average,
+    // remove the oldest one
+    if (temperatureReadings.size() > MOVING_AVERAGE_SIZE) {
+        temperatureReadings.pop_front();
     }
+
+    // Calculate the sum of the readings
+    float sum = std::accumulate(temperatureReadings.begin(),
+                                temperatureReadings.end(), 0.0f);
+
+    // Calculate and return the moving average
+    return sum / temperatureReadings.size();
 }
 
-// Web page to display temperature and humidity values
+// Read the humidity from the DHT11 sensor and
+// calculate the moving average of the last readings
+float readHumidityAndCalculateMovingAverage() {
+    float currentHumidity = dht.readHumidity();
+    // If the reading is NaN, return the last valid reading
+    if (isnan(currentHumidity)) {
+        return humidityReadings.back();
+    }
+
+    // Add the current reading to the readings deque
+    humidityReadings.push_back(currentHumidity);
+
+    // If we have more readings than we want to consider for the moving average,
+    // remove the oldest one
+    if (humidityReadings.size() > MOVING_AVERAGE_SIZE) {
+        humidityReadings.pop_front();
+    }
+
+    // Calculate the sum of the readings
+    float sum =
+        std::accumulate(humidityReadings.begin(), humidityReadings.end(), 0.0f);
+
+    // Calculate and return the moving average
+    return sum / humidityReadings.size();
+}
+
+// HTML code for the web page served by the ESP32 microcontroller
+// The placeholders %TEMPERATURE% and %HUMIDITY% will be replaced by the actual
+// values
 const char index_html[] PROGMEM = R"rawliteral(
 <!DOCTYPE HTML><html>
 <script src="https://kit.fontawesome.com/1b6e98d141.js" crossorigin="anonymous"></script>
@@ -215,109 +226,98 @@ setInterval(function ( ) {
 </script>
 </html>)rawliteral";
 
-// Replaces placeholders on HTML with DHT11 values
+// Function to replace the placeholders in the HTML code
+// with the actual values
 String processor(const String &var) {
     // Serial.println(var);
     if (var == "TEMPERATURE") {
-        return String(readTemperature());
+        return String(readTemperatureAndCalculateMovingAverage());
     } else if (var == "HUMIDITY") {
-        return String(readHumidity());
+        return String(readHumidityAndCalculateMovingAverage());
     }
     return String();
 }
 
-// Main function
+// Setup function
+// This function is called only once when the microcontroller starts
 void setup() {
-    Serial.begin(115200);  // Initialize serial communication
-    dht.begin();           // Initialize DHT sensor
-    setupWifi();          // Setup Wi-Fi connection
-    client.setServer(mqttServer, mqttPort);  
-    
-    // Route for root / web page
+    Serial.begin(115200);                    // Initialize serial communication
+    dht.begin();                             // Initialize DHT sensor
+    setupWifi();                             // Setup Wi-Fi connection
+    client.setServer(mqttServer, mqttPort);  // Setup MQTT broker
+
+    // Setup the web server, and define the routes
     server.on("/", HTTP_GET, [](AsyncWebServerRequest *request) {
         request->send_P(200, "text/html", index_html, processor);
     });
     server.on("/temperature", HTTP_GET, [](AsyncWebServerRequest *request) {
-        request->send_P(200, "text/plain", String(readTemperature()).c_str());
+        request->send_P(
+            200, "text/plain",
+            String(readTemperatureAndCalculateMovingAverage()).c_str());
     });
     server.on("/humidity", HTTP_GET, [](AsyncWebServerRequest *request) {
-        request->send_P(200, "text/plain", String(readHumidity()).c_str());
+        request->send_P(
+            200, "text/plain",
+            String(readHumidityAndCalculateMovingAverage()).c_str());
     });
 
     // Start server
-    server.begin();// Setup MQTT broker
+    server.begin();
 }
 
 // Loop function
+// This function is called repeatedly
 void loop() {
     // Check if the client is connected to the MQTT broker
     if (!client.connected()) {
         reconnect();
     }
 
-    // Read temperature and humidity from the DHT11 sensor
-    float temperature = readTemperature();
-    float humidity = readHumidity();
+    // Every 3 seconds, read the temperature and humidity from the DHT11 sensor,
+    // calculate the moving average, and publish the values to the MQTT broker
+    // This interval allows the microcontroller to perform other tasks 
+    // and not be constantly occupied with reading sensor data.
+    unsigned long currentMillis = millis();
+    if (currentMillis - lastReadingTime >= 3000) {
+        // Read the temperature and humidity from the DHT11 sensor and
+        // calculate the moving average
+        float avgTemperature = readTemperatureAndCalculateMovingAverage();
+        float avgHumidity = readHumidityAndCalculateMovingAverage();
 
-    // Check if any reading is invalid
-    if (isnan(humidity) || isnan(temperature)) {
-        Serial.println("Failed to read from DHT sensor!");
-        delay(2000);
-        return;
+        // Convert the float values to strings
+        char avgTempStr[8];
+        dtostrf(avgTemperature, 2, 2, avgTempStr);
+        char avgHumStr[8];
+        dtostrf(avgHumidity, 2, 2, avgHumStr);
+
+        // Name of the topics to publish the values
+        char avgTempTopic[] = "esp32/moving_average_temperature";
+        char avgHumTopic[] = "esp32/moving_average_humidity";
+
+        // Publish the values to the MQTT broker
+        client.publish(avgTempTopic, avgTempStr);
+        client.publish(avgHumTopic, avgHumStr);
+
+        // Print the values and topics to the serial monitor for debugging
+        Serial.println();
+        Serial.println("+~~~~~~~~~~~~~~~~~~~+~~~~~~~~~~~~~~~~~~~+");
+        Serial.println("|               DEBUGGING               |");
+        Serial.println("+~~~~~~~~~~~~~~~~~~~+~~~~~~~~~~~~~~~~>~~~+");
+        Serial.printf("| Local IP Address  | %-17s |\n",
+                      WiFi.localIP().toString().c_str());
+        Serial.println("+~~~~~~~~~~~~~~~~~~~+~~~~~~~~~~~~~~~~~~~+");
+        Serial.println("| Parameter         | Value             |");
+        Serial.println("+-------------------+-------------------+");
+        Serial.printf("| Moving Avg Temp.  | %-17.2f |\n", avgTemperature);
+        Serial.printf("| Moving Avg Humid. | %-17.2f |\n", avgHumidity);
+        Serial.println("+-------------------+-------------------+");
+        Serial.println("|            Published Topic            |");
+        Serial.println("+-------------------+-------------------+");
+        Serial.println("| " + String(avgTempTopic) + "      |");
+        Serial.println("| " + String(avgHumTopic) + "         |");
+        Serial.println("+-------------------+-------------------+");
+
+        // Update the last reading time
+        lastReadingTime = currentMillis;
     }
-
-    // Update the readings array
-    updateReadings(temperatureReadings, temperature);
-    updateReadings(humidityReadings, humidity);
-
-    // Calculate the moving average of the last 5 readings
-    float avgTemperature = calculateMovingAverage(temperatureReadings);
-    float avgHumidity = calculateMovingAverage(humidityReadings);
-
-    // Convert the float values to strings
-    char tempStr[8];
-    dtostrf(temperature, 2, 2, tempStr);
-    char humStr[8];
-    dtostrf(humidity, 2, 2, humStr);
-    char avgTempStr[8];
-    dtostrf(avgTemperature, 2, 2, avgTempStr);
-    char avgHumStr[8];
-    dtostrf(avgHumidity, 2, 2, avgHumStr);
-
-    // Name of the topics to publish the values
-    char tempTopic[] = "esp32/temperature";
-    char humTopic[] = "esp32/humidity";
-    char avgTempTopic[] = "esp32/moving_average_temperature";
-    char avgHumTopic[] = "esp32/moving_average_humidity";
-
-    // Publish the values to the MQTT broker
-    client.publish(tempTopic, tempStr);
-    client.publish(humTopic, humStr);
-    client.publish(avgTempTopic, avgTempStr);
-    client.publish(avgHumTopic, avgHumStr);
-
-    // Print the values and topics to the serial monitor for debugging
-    Serial.println();
-    Serial.println("+~~~~~~~~~~~~~~~~~~~+~~~~~~~~~~~~~~~~~~~+");
-    Serial.println("|               DEBUGGING               |");
-    Serial.println("+~~~~~~~~~~~~~~~~~~~+~~~~~~~~~~~~~~~~~~~+");
-    Serial.printf("| Local IP Address  | %-17s |\n", WiFi.localIP().toString().c_str());
-    Serial.println("+~~~~~~~~~~~~~~~~~~~+~~~~~~~~~~~~~~~~~~~+");
-    Serial.println("| Parameter         | Value             |");
-    Serial.println("+-------------------+-------------------+");
-    Serial.printf("| Temperature       | %-17.2f |\n", temperature);
-    Serial.printf("| Humidity          | %-17.2f |\n", humidity);
-    Serial.printf("| Moving Avg Temp.  | %-17.2f |\n", avgTemperature);
-    Serial.printf("| Moving Avg Humid. | %-17.2f |\n", avgHumidity);
-    Serial.println("+-------------------+-------------------+");
-    Serial.println("|            Published Topic            |");
-    Serial.println("+-------------------+-------------------+");
-    Serial.println("| " + String(tempTopic) + "                     |");
-    Serial.println("| " + String(humTopic) + "                        |");
-    Serial.println("| " + String(avgTempTopic) + "      |");
-    Serial.println("| " + String(avgHumTopic) + "         |");
-    Serial.println("+-------------------+-------------------+");
-
-    // Wait 3 seconds before reading the sensor again
-    delay(3000);
 }
