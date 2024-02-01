@@ -123,14 +123,129 @@ float calculateMovingAverage(float *readings) {
     }
 }
 
+// Web page to display temperature and humidity values
+const char index_html[] PROGMEM = R"rawliteral(
+<!DOCTYPE HTML><html>
+<script src="https://kit.fontawesome.com/1b6e98d141.js" crossorigin="anonymous"></script>
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+  body {
+    font-family: Arial, sans-serif;
+    background-color: #121212;
+    color: #ffffff;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100vh;
+    }
+    .header { display: flex; align-items: center; gap: 20px; }
+    .header img { width: 160px; height: auto; }
+    .header h2 { font-size: 2.5rem; color: #ffffff; }
+    p { background-color: #1f1f1f; border-radius: 5px; padding: 20px; margin: 10px; width: 80vw; display: flex; align-items: center; justify-content: space-between; }
+    .units { font-size: 1rem; }
+    .fa-solid, .fas { margin-right: 10px; }
+    .dht-labels{
+      flex-grow: 1;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+    footer {
+      position: fixed;
+      left: 0;
+      bottom: 0;
+      width: 100vw;
+      background-color: #1f1f1f;
+      color: white;
+      text-align: center;
+      padding: 10px 0;
+    }
+    footer a {
+      color: white;
+      text-decoration: none;
+    }
+    footer a:hover {
+      color: #ddd;
+    }
+  </style>
+</head>
+<body>
+  <div class="header"><img src="https://i.imgur.com/23DiEOf.png"><h2>ESP32</h2></div>
+  <p>
+    <i class="fa fa-temperature-high" style="color:#9e0505;"></i> 
+    <span class="dht-labels">  TEMPERATURE</span> 
+    <span id="temperature">%TEMPERATURE%</span>
+    <span class="units">&deg;C</span>
+  </p>
+  <p>
+    <i class="fas fa-tint" style="color:#00add6;"></i> 
+    <span class="dht-labels">  HUMIDITY</span>
+    <span id="humidity">%HUMIDITY%</span>
+    <span class="units">&percnt;</span>
+  </p>
+  <footer>
+    <a href="https://github.com/joaoalexarruda" target="_blank"><i class="fab fa-github fa-2x"></i></a>
+  </footer>
+</body>
+<script>
+setInterval(function ( ) {
+  var xhttp = new XMLHttpRequest();
+  xhttp.onreadystatechange = function() {
+    if (this.readyState == 4 && this.status == 200) {
+      document.getElementById("temperature").innerHTML = this.responseText;
+    }
+  };
+  xhttp.open("GET", "/temperature", true);
+  xhttp.send();
+}, 10000 ) ;
 
+setInterval(function ( ) {
+  var xhttp = new XMLHttpRequest();
+  xhttp.onreadystatechange = function() {
+    if (this.readyState == 4 && this.status == 200) {
+      document.getElementById("humidity").innerHTML = this.responseText;
+    }
+  };
+  xhttp.open("GET", "/humidity", true);
+  xhttp.send();
+}, 10000 ) ;
+</script>
+</html>)rawliteral";
+
+// Replaces placeholders on HTML with DHT11 values
+String processor(const String &var) {
+    // Serial.println(var);
+    if (var == "TEMPERATURE") {
+        return String(readTemperature());
+    } else if (var == "HUMIDITY") {
+        return String(readHumidity());
+    }
+    return String();
+}
 
 // Main function
 void setup() {
     Serial.begin(115200);  // Initialize serial communication
     dht.begin();           // Initialize DHT sensor
     setupWifi();          // Setup Wi-Fi connection
-    client.setServer(mqttServer, mqttPort);  // Setup MQTT broker
+    client.setServer(mqttServer, mqttPort);  
+    
+    // Route for root / web page
+    server.on("/", HTTP_GET, [](AsyncWebServerRequest *request) {
+        request->send_P(200, "text/html", index_html, processor);
+    });
+    server.on("/temperature", HTTP_GET, [](AsyncWebServerRequest *request) {
+        request->send_P(200, "text/plain", String(readTemperature()).c_str());
+    });
+    server.on("/humidity", HTTP_GET, [](AsyncWebServerRequest *request) {
+        request->send_P(200, "text/plain", String(readHumidity()).c_str());
+    });
+
+    // Start server
+    server.begin();// Setup MQTT broker
 }
 
 // Loop function
@@ -184,7 +299,9 @@ void loop() {
     // Print the values and topics to the serial monitor for debugging
     Serial.println();
     Serial.println("+~~~~~~~~~~~~~~~~~~~+~~~~~~~~~~~~~~~~~~~+");
-    Serial.println("|               Debugging               |");
+    Serial.println("|               DEBUGGING               |");
+    Serial.println("+~~~~~~~~~~~~~~~~~~~+~~~~~~~~~~~~~~~~~~~+");
+    Serial.printf("| Local IP Address  | %-17s |\n", WiFi.localIP().toString().c_str());
     Serial.println("+~~~~~~~~~~~~~~~~~~~+~~~~~~~~~~~~~~~~~~~+");
     Serial.println("| Parameter         | Value             |");
     Serial.println("+-------------------+-------------------+");
