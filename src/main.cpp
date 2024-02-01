@@ -16,8 +16,8 @@
 #include <DHT.h>
 #include <PubSubClient.h>
 #include <WiFi.h>
-#include <deque> // To be able to add and remove elements from both ends
-#include <numeric> 
+#include <deque>  // To be able to add and remove elements from both ends
+#include <numeric>
 #include "ESPAsyncWebServer.h"
 
 // Wifi details: SSID and password
@@ -48,7 +48,7 @@ unsigned long lastReadingTime = 0;
 // to serve the web page
 AsyncWebServer server(80);
 
-// WifiClient and PubSubClient instances, 
+// WifiClient and PubSubClient instances,
 // to connect to the MQTT broker
 WiFiClient espClient;
 PubSubClient client(espClient);
@@ -275,7 +275,7 @@ void loop() {
 
     // Every 3 seconds, read the temperature and humidity from the DHT11 sensor,
     // calculate the moving average, and publish the values to the MQTT broker
-    // This interval allows the microcontroller to perform other tasks 
+    // This interval allows the microcontroller to perform other tasks
     // and not be constantly occupied with reading sensor data.
     unsigned long currentMillis = millis();
     if (currentMillis - lastReadingTime >= 3000) {
