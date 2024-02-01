@@ -45,6 +45,9 @@ float humidityReadings[numReadings] = {-1.0};
 #define DHTTYPE DHT11
 DHT dht(DHTPIN, DHTTYPE);
 
+// Create AsyncWebServer object on port 80
+AsyncWebServer server(80);
+
 /* This line creates an instance of the WiFiClient class which represents a TCP
    client that can connect to a specified internet IP address and port. */
 WiFiClient espClient;
@@ -75,6 +78,18 @@ void reconnect() {
             delay(5000);
         }
     }
+}
+
+// Function to read the temperature from the DHT11 sensor
+float readTemperature() {
+    float temperature = dht.readTemperature();
+    return temperature;
+}
+
+// Function to read the humidity from the DHT11 sensor
+float readHumidity() {
+    float humidity = dht.readHumidity();
+    return humidity;
 }
 
 // Function to update the readings array
@@ -108,6 +123,8 @@ float calculateMovingAverage(float *readings) {
     }
 }
 
+
+
 // Main function
 void setup() {
     Serial.begin(115200);  // Initialize serial communication
@@ -124,8 +141,8 @@ void loop() {
     }
 
     // Read temperature and humidity from the DHT11 sensor
-    float humidity = dht.readHumidity();
-    float temperature = dht.readTemperature();
+    float temperature = readTemperature();
+    float humidity = readHumidity();
 
     // Check if any reading is invalid
     if (isnan(humidity) || isnan(temperature)) {
@@ -166,7 +183,9 @@ void loop() {
 
     // Print the values and topics to the serial monitor for debugging
     Serial.println();
-    Serial.println("+-------------------+-------------------+");
+    Serial.println("+~~~~~~~~~~~~~~~~~~~+~~~~~~~~~~~~~~~~~~~+");
+    Serial.println("|               Debugging               |");
+    Serial.println("+~~~~~~~~~~~~~~~~~~~+~~~~~~~~~~~~~~~~~~~+");
     Serial.println("| Parameter         | Value             |");
     Serial.println("+-------------------+-------------------+");
     Serial.printf("| Temperature       | %-17.2f |\n", temperature);
