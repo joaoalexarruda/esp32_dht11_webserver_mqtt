@@ -7,7 +7,7 @@ It's an assignment for the unit "Internet of Things" from the [Data Science and 
 
 ## Project explanation
 
-There is a dedicated [pdf file]() with the project explanation.
+There is a dedicated [pdf file](ProjetoFinal_JoaoAlexArrudaDaSilva.pdf) with the project explanation.
 
 ## License
 
