@@ -5,9 +5,14 @@ It also publishes the temperature and humidity to a MQTT broker.
 
 It's an assignment for the unit "Internet of Things" from the [Data Science and Digital Transformation](https://www.ipportalegre.pt/pt/oferta-formativa/pos-graduacao-data-science-and-digital-transformation) post-graduation course at the [Instituto Politécnico de Portalegre](https://www.ipportalegre.pt/pt/), Portugal.
 
+## Screenshots
+
+![Web page](https://imgur.com/n4F2tsw.png)
+![Serial monitor](https://imgur.com/FBsA2S9.png)
+
 ## Project explanation
 
-There is a dedicated [pdf file](ProjetoFinal_JoaoAlexArrudaDaSilva.pdf) with the project explanation.
+There is a dedicated [pdf file](Projeto_Prático___IoT.pdf) with the project explanation.
 
 ## License
 
